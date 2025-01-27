@@ -1,9 +1,13 @@
 import json 
 import logging
 import urllib.request 
-from fastapi import FastAPI, HTTPException 
+from fastapi import FastAPI, HTTPException, Depends 
 from typing import Dict
+from sqlalchemy.orm import Session
+from pydantic.networks import HttpUrl
 from schemas import PokemonModel, PokemonUpdateModel
+from database import Base, engine, get_db
+from models import Pokemon, Ability, Stat, Type
 
 
 # Configure logging
@@ -16,6 +20,9 @@ logging.basicConfig(
     style="{"
 )
 
+# Initialize the database
+Base.metadata.create_all(bind=engine)
+
 # URL for the dataset
 data_url = "https://raw.githubusercontent.com/DetainedDeveloper/Pokedex/master/pokedex_raw/pokedex_raw_array.json" 
 
@@ -27,30 +34,59 @@ data_cache: Dict[int, Dict] = {}
 
 
 
-@app.on_event("startup") 
-def load_data(): 
+@app.on_event("startup")
+def load_data():
     """
-    Loads Pokémon data from a specified URL into the in-memory cache.
-
-    This function is triggered on application startup. It retrieves Pokémon data
-    from a remote JSON source, processes it, and stores it in the global data_cache
-    for quick access. In case of any errors during the data loading process, an
-    appropriate error message is logged, and a RuntimeError is raised.
-
-    Raises:
-        RuntimeError: If there is an error while loading or processing the data.
+    Load Pokémon data into the database when the app starts.
     """
-    global data_cache 
     try:
+        with urllib.request.urlopen(data_url) as response:
+            data = json.loads(response.read().decode())
+        
+        db: Session = next(get_db())
+        for p in data:
+            if not db.query(Pokemon).filter(Pokemon.id == p["id"]).first():
+                # Add Pokémon
+                pokemon = Pokemon(
+                    id=p["id"],
+                    name=p["name"],
+                    height=p["height"],
+                    weight=p["weight"],
+                    xp=p["xp"],
+                    image_url=p["image_url"],
+                    pokemon_url=p["pokemon_url"]
+                )
+                db.add(pokemon)
 
-        with urllib.request.urlopen(data_url) as response: 
-            data = json.loads(response.read().decode()) 
-            data_cache = {int(pokemon["id"]): pokemon for pokemon in data}
-            logging.info("Successfully loaded Pokémon data from the URL.")
+                # Add abilities
+                for ab in p["abilities"]:
+                    ability = Ability(
+                        name=ab["name"],
+                        is_hidden=ab["is_hidden"],
+                        pokemon=pokemon
+                    )
+                    db.add(ability)
 
-    except Exception as e: 
-        logging.error(f"Failed to load Pokémon data: {e}")
-        raise RuntimeError(f"Failed to load Pokémon data: {e}") 
+                # Add stats
+                for st in p["stats"]:
+                    stat = Stat(
+                        name=st["name"],
+                        base_stat=st["base_stat"],
+                        pokemon=pokemon
+                    )
+                    db.add(stat)
+
+                # Add types
+                for t in p["types"]:
+                    type_ = Type(
+                        name=t["name"],
+                        pokemon=pokemon
+                    )
+                    db.add(type_)
+
+        db.commit()
+    except Exception as e:
+        print(f"Error loading data: {e}")
 
 
 @app.get("/") 
@@ -69,139 +105,138 @@ def root():
 
 
 
-@app.get("/pokemon/{pokemon_id}") 
-def get_pokemon_by_id(pokemon_id: int): 
-    """
-    Retrieves a Pokémon by its ID.
-
-    This endpoint fetches a Pokémon from the in-memory data cache using its unique ID.
-    If the Pokémon is found, it returns the corresponding data. If not, a 404 error is raised.
-
-    Parameters:
-        pokemon_id (int): The unique ID of the Pokémon to retrieve.
-
-    Returns:
-        Dict[str, Any]: The data of the Pokémon if found.
-
-    Raises:
-        HTTPException: If the Pokémon is not found, a 404 error is raised.
-    """
-    if pokemon_id in data_cache: 
-        logging.info(f"Successfully retrieved Pokémon with ID: {pokemon_id}")
-        return data_cache[pokemon_id] 
+@app.get("/pokemon/{pokemon_id}", response_model=PokemonModel) 
+def get_pokemon_by_id(pokemon_id: int, db: Session = Depends(get_db)): 
+    
+    pokemon = db.query(Pokemon).filter(Pokemon.id == pokemon_id).first()
+    if pokemon:
+        logging.info(f"Successfully retrieved Pokemon with ID: {pokemon_id}")
+        return pokemon
     else:
-        logging.error(f"Failed to find Pokémon with ID: {pokemon_id}")
-        raise HTTPException(status_code=404, detail="Pokémon not found") 
+        logging.error(f"Failed to find Pokemon with ID: {pokemon_id}")
+        raise HTTPException(status_code=404, detail="Pokemon not found")
+    
 
-
-
-@app.get("/pokemon/name/{pokemon_name}")
-def get_pokemon_by_name(pokemon_name: str):
-    """
-    Retrieves a Pokémon by its name.
-
-    This endpoint fetches a Pokémon from the in-memory data cache using its name.
-    If the Pokémon is found, it returns the corresponding data. If not, a 404 error is raised.
-
-    Parameters:
-        pokemon_name (str): The name of the Pokémon to retrieve.
-
-    Returns:
-        Dict[str, Any]: The data of the Pokémon if found.
-
-    Raises:
-        HTTPException: If the Pokémon is not found, a 404 error is raised.
-    """
-    for pokemon in data_cache.values():
-
-        if pokemon["name"].lower() == pokemon_name.lower():
-            logging.info(f"Successfully retrieved Pokémon with name: {pokemon_name}")
-            return pokemon
-    logging.warning(f"Failed to find Pokémon with name: {pokemon_name}")    
-    raise HTTPException(status_code=404, detail="Pokémon not found")
-
+@app.get("/pokemon/name/{pokemon_name}", response_model=PokemonModel)
+def get_pokemon_by_name(pokemon_name: str, db: Session = Depends(get_db)):
+    
+    pokemon = db.query(Pokemon).filter(Pokemon.name.ilike(pokemon_name)).first()
+    if pokemon:
+        logging.info(f"Successfully retrieved Pokemon with name: {pokemon_name}")
+        return pokemon
+    else:
+        logging.error(f"Failed to find Pokemon with name: {pokemon_name}")
+        raise HTTPException(status_code=404, detail="Pokemon not found")
 
 
 @app.post("/pokemon/")
-def create_pokemon(pokemon: PokemonModel):
-    """
-    Creates a new Pokémon in the in-memory data cache.
+def create_pokemon(pokemon: PokemonModel, db: Session = Depends(get_db)):
+    
+    existing_pokemon = db.query(Pokemon).filter(Pokemon.id == pokemon.id).first()
+    if existing_pokemon:
+        logging.warning(f"Attempt to create Pokemon with existing ID: {pokemon.id}")
+        raise HTTPException(status_code=400, detail="Pokemon with this ID already exists.")
+    
+    # Convert HttpUrl fields to strings
+    image_url = str(pokemon.image_url) if isinstance(pokemon.image_url, HttpUrl) else pokemon.image_url
+    pokemon_url = str(pokemon.pokemon_url) if isinstance(pokemon.pokemon_url, HttpUrl) else pokemon.pokemon_url
 
-    This endpoint creates a new Pokémon from the input data and stores it in the
-    in-memory data cache. If a Pokémon with the same ID already exists, a 400
-    error is raised.
+    # Create an instance of the ORM model
+    new_pokemon = Pokemon(
+        id=pokemon.id,
+        name=pokemon.name,
+        height=pokemon.height,
+        weight=pokemon.weight,
+        xp=pokemon.xp,
+        image_url=image_url,
+        pokemon_url=pokemon_url
+    )
+     # Add abilities to the Pokémon
+    for ability in pokemon.abilities:
+        new_ability = Ability(
+            name=ability.name,
+            is_hidden=ability.is_hidden,
+            pokemon=new_pokemon  # Associate ability with the new Pokémon
+        )
+        new_pokemon.abilities.append(new_ability)
 
-    Parameters:
-        pokemon (PokemonModel): The Pokémon data to add.
+    # Add stats to the Pokémon
+    for stat in pokemon.stats:
+        new_stat = Stat(
+            name=stat.name,
+            base_stat=stat.base_stat,
+            pokemon=new_pokemon  # Associate stat with the new Pokémon
+        )
+        new_pokemon.stats.append(new_stat)
 
-    Returns:
-        Dict[str, Any]: A dictionary containing a success message and the
-            created Pokémon.
+    # Add types to the Pokémon
+    for pokemon_type in pokemon.types:
+        new_type = Type(
+            name=pokemon_type.name,
+            pokemon=new_pokemon  # Associate type with the new Pokémon
+        )
+        new_pokemon.types.append(new_type)
 
-    Raises:
-        HTTPException: If the Pokémon with the same ID already exists, a 400
-            error is raised.
-    """
-    if pokemon.id in data_cache:
-        logging.warning(f"Attempt to create Pokémon with existing ID: {pokemon.id}")
-        raise HTTPException(status_code=400, detail="Pokémon with this ID already exists.")
-    data_cache[pokemon.id] = pokemon.dict()
-    logging.info(f"Successfully created Pokémon with ID: {pokemon.id}")
-    return {"message": "Pokémon added successfully", "pokemon": pokemon}
+    db.add(new_pokemon)
+    db.commit()
+    db.refresh(new_pokemon)
+    logging.info(f"Successfully created pokemon with ID: {pokemon.id}")
+    return {"message": "Pokemon added successfully", "pokemon": new_pokemon}
+    
 
 
 
 @app.put("/pokemon/{pokemon_id}")
-def update_pokemon(pokemon_id: int, updated_data: PokemonUpdateModel):
-    """
-    Updates an existing Pokémon in the in-memory data cache.
-
-    This endpoint updates the data of an existing Pokémon identified by its ID.
-    The updated data is provided in the request body. If the Pokémon is not found,
-    a 404 error is raised. The ID of the Pokémon cannot be changed during the update.
-
-    Parameters:
-        pokemon_id (int): The unique ID of the Pokémon to update.
-        updated_data (PokemonUpdateModel): The updated data for the Pokémon.
-
-    Returns:
-        Dict[str, Any]: A dictionary containing a success message and the updated Pokémon data.
-
-    Raises:
-        HTTPException: If the Pokémon is not found, a 404 error is raised.
-    """
-    if pokemon_id not in data_cache:
-        logging.warning(f"Attempt to update non-existing Pokémon with ID: {pokemon_id}")
-        raise HTTPException(status_code=404, detail="Pokémon not found")
+def update_pokemon(pokemon_id: int, updated_data: PokemonUpdateModel, db: Session = Depends(get_db)):
     
-    # Prevent ID changes during updates
-    existing_data = data_cache[pokemon_id]
-    updated_data_dict = updated_data.dict()
-    updated_data_dict["id"] = existing_data["id"]
+    pokemon = db.query(Pokemon).filter(Pokemon.id == pokemon_id).first()
+    if not pokemon:
+        logging.warning(f"Attempt to update non-existing Pokemon with ID: {pokemon_id}")
+        raise HTTPException(status_code=404, detail="Pokemon not found")
+    
+    for key, value in updated_data.dict(exclude_unset=True, exclude={"abilities", "stats", "types"}).items():
+        # Convert HttpUrl to string if needed
+        if isinstance(value, HttpUrl):
+            value = str(value)
+        setattr(pokemon, key, value)
 
-    data_cache[pokemon_id] = updated_data_dict
-    logging.info(f"Successfully updated Pokémon with ID: {pokemon_id}")
-    return {"message": "Pokémon updated successfully", "pokemon": data_cache[pokemon_id]}
+     # Update abilities
+    if updated_data.abilities is not None:
+        # Clear existing abilities
+        db.query(Ability).filter(Ability.pokemon_id == pokemon_id).delete()
+        # Add new abilities
+        for ability_data in updated_data.abilities:
+            new_ability = Ability(**ability_data.dict(), pokemon_id=pokemon_id)
+            db.add(new_ability)
+
+    # Update stats
+    if updated_data.stats is not None:
+        # Clear existing stats
+        db.query(Stat).filter(Stat.pokemon_id == pokemon_id).delete()
+        # Add new stats
+        for stat_data in updated_data.stats:
+            new_stat = Stat(**stat_data.dict(), pokemon_id=pokemon_id)
+            db.add(new_stat)
+
+    # Update types
+    if updated_data.types is not None:
+        # Clear existing types
+        db.query(Type).filter(Type.pokemon_id == pokemon_id).delete()
+        # Add new types
+        for type_data in updated_data.types:
+            new_type = Type(**type_data.dict(), pokemon_id=pokemon_id)
+            db.add(new_type)
+
+    db.commit()
+    db.refresh(pokemon)
+    logging.info(f"Successfully updated Pokemon with ID: {pokemon_id}")
+    return {"message": "Pokemon updated successfully", "pokemon": pokemon}
 
 
 
 @app.delete("/pokemon/{pokemon_id}")
-def delete_pokemon(pokemon_id: int):
+def delete_pokemon(pokemon_id: int, db: Session = Depends(get_db)):
     
-    """
-    Endpoint to delete a Pokémon by its ID.
-
-    This endpoint deletes a Pokémon by its ID from the in-memory cache. If the Pokémon is found, it is deleted and a success message is returned. If the Pokémon is not found, a 404 error is raised.
-
-    Parameters:
-    pokemon_id (int): The ID of the Pokémon to delete.
-
-    Returns:
-    Dict[str, Any]: A dictionary containing a success message and the deleted Pokémon.
-
-    Raises:
-    HTTPException: If the Pokémon is not found, a 404 error is raised.
-    """
     if pokemon_id not in data_cache:
         logging.warning(f"Attempt to delete non-existing Pokémon with ID: {pokemon_id}")
         raise HTTPException(status_code=404, detail="Pokémon not found")

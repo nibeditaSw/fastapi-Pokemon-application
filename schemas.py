@@ -6,14 +6,23 @@ class Ability(BaseModel):
     name: str
     is_hidden: bool
 
+    # class Config:
+    #     orm_mode = True
+
 
 class Stat(BaseModel):
     name: str
     base_stat: int = 0
 
+    # class Config:
+    #     orm_mode = True
+
 
 class Type(BaseModel):
     name: str
+
+    # class Config:
+    #     orm_mode = True
 
 
 class PokemonModel(BaseModel):
@@ -28,6 +37,9 @@ class PokemonModel(BaseModel):
     stats: List[Stat]
     types: List[Type]
 
+    class Config:
+        orm_mode = True
+
 
 class PokemonUpdateModel(BaseModel):
     name: str
@@ -39,3 +51,6 @@ class PokemonUpdateModel(BaseModel):
     abilities: List[Ability]
     stats: List[Stat]
     types: List[Type]
+
+    class Config:
+        orm_mode = True
