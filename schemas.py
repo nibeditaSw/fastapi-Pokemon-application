@@ -48,9 +48,9 @@ class PokemonUpdateModel(BaseModel):
     xp: Optional[int] = 0
     image_url: Optional[HttpUrl]
     pokemon_url: Optional[HttpUrl]
-    abilities: List[Ability]
-    stats: List[Stat]
-    types: List[Type]
+    abilities: Optional[List[Ability]]
+    stats: Optional[List[Stat]]
+    types: Optional[List[Type]]
 
     class Config:
         orm_mode = True

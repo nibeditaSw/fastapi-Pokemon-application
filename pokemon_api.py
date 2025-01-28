@@ -129,7 +129,7 @@ def get_pokemon_by_name(pokemon_name: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Pokemon not found")
 
 
-@app.post("/pokemon/")
+@app.post("/pokemon/", response_model=PokemonModel)
 def create_pokemon(pokemon: PokemonModel, db: Session = Depends(get_db)):
     
     existing_pokemon = db.query(Pokemon).filter(Pokemon.id == pokemon.id).first()
@@ -151,42 +151,40 @@ def create_pokemon(pokemon: PokemonModel, db: Session = Depends(get_db)):
         image_url=image_url,
         pokemon_url=pokemon_url
     )
-     # Add abilities to the Pokémon
-    for ability in pokemon.abilities:
-        new_ability = Ability(
-            name=ability.name,
-            is_hidden=ability.is_hidden,
-            pokemon=new_pokemon  # Associate ability with the new Pokémon
-        )
-        new_pokemon.abilities.append(new_ability)
-
-    # Add stats to the Pokémon
-    for stat in pokemon.stats:
-        new_stat = Stat(
-            name=stat.name,
-            base_stat=stat.base_stat,
-            pokemon=new_pokemon  # Associate stat with the new Pokémon
-        )
-        new_pokemon.stats.append(new_stat)
-
-    # Add types to the Pokémon
-    for pokemon_type in pokemon.types:
-        new_type = Type(
-            name=pokemon_type.name,
-            pokemon=new_pokemon  # Associate type with the new Pokémon
-        )
-        new_pokemon.types.append(new_type)
+     # Add abilities, stats, and types
+    new_pokemon.abilities = [
+        Ability(name=ability.name, is_hidden=ability.is_hidden) for ability in pokemon.abilities
+    ]
+    new_pokemon.stats = [
+        Stat(name=stat.name, base_stat=stat.base_stat) for stat in pokemon.stats
+    ]
+    new_pokemon.types = [
+        Type(name=type_.name) for type_ in pokemon.types
+    ]
 
     db.add(new_pokemon)
     db.commit()
     db.refresh(new_pokemon)
+    # serialize the data for the response
+    response = {
+        "id": new_pokemon.id,
+        "name": new_pokemon.name,
+        "height": new_pokemon.height,
+        "weight": new_pokemon.weight,
+        "xp": new_pokemon.xp,
+        "image_url": new_pokemon.image_url,
+        "pokemon_url": new_pokemon.pokemon_url,
+        "abilities": [{"name": a.name, "is_hidden": a.is_hidden} for a in new_pokemon.abilities],
+        "stats": [{"name": s.name, "base_stat": s.base_stat} for s in new_pokemon.stats],
+        "types": [{"name": t.name} for t in new_pokemon.types],
+    }
+
     logging.info(f"Successfully created pokemon with ID: {pokemon.id}")
-    return {"message": "Pokemon added successfully", "pokemon": new_pokemon}
+    return response
     
 
 
-
-@app.put("/pokemon/{pokemon_id}")
+@app.put("/pokemon/{pokemon_id}", response_model=PokemonUpdateModel)
 def update_pokemon(pokemon_id: int, updated_data: PokemonUpdateModel, db: Session = Depends(get_db)):
     
     pokemon = db.query(Pokemon).filter(Pokemon.id == pokemon_id).first()
@@ -230,17 +228,19 @@ def update_pokemon(pokemon_id: int, updated_data: PokemonUpdateModel, db: Sessio
     db.commit()
     db.refresh(pokemon)
     logging.info(f"Successfully updated Pokemon with ID: {pokemon_id}")
-    return {"message": "Pokemon updated successfully", "pokemon": pokemon}
+    return pokemon
 
 
 
 @app.delete("/pokemon/{pokemon_id}")
 def delete_pokemon(pokemon_id: int, db: Session = Depends(get_db)):
     
-    if pokemon_id not in data_cache:
-        logging.warning(f"Attempt to delete non-existing Pokémon with ID: {pokemon_id}")
-        raise HTTPException(status_code=404, detail="Pokémon not found")
-    deleted_pokemon = data_cache.pop(pokemon_id)
-    logging.info(f"Successfully deleted Pokémon with ID: {pokemon_id}")
-    return {"message": "Pokémon deleted successfully", "pokemon": deleted_pokemon}
-    
+    pokemon = db.query(Pokemon).filter(Pokemon.id == pokemon_id).first()
+    if not pokemon:
+        logging.warning(f"Attempt to delete non-existing Pokemon with ID: {pokemon_id}")
+        raise HTTPException(status_code=404, detail="Pokemon not found")
+
+    db.delete(pokemon)
+    db.commit()
+    logging.info(f"Successfully deleted Pokemon with ID: {pokemon_id}")
+    return pokemon
