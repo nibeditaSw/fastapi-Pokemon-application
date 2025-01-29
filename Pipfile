@@ -9,6 +9,7 @@ requests = "*"
 sqlalchemy = "*"
 psycopg2 = "*"
 fastapi = {extras = ["all"], version = "*"}
+python-dotenv = "*"
 
 [dev-packages]
 
