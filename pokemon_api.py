@@ -2,7 +2,7 @@ import json
 import logging
 import urllib.request 
 from fastapi import FastAPI, HTTPException, Depends 
-from typing import Dict
+from typing import Dict, List
 from sqlalchemy.orm import Session
 from pydantic.networks import HttpUrl
 from schemas import PokemonModel, PokemonUpdateModel
@@ -29,7 +29,7 @@ data_url = "https://raw.githubusercontent.com/DetainedDeveloper/Pokedex/master/p
 # Initialize FastAPI app
 app = FastAPI() 
 
-# In-memory storage for Pokémon data
+# In-memory storage for Pokemon data
 data_cache: Dict[int, Dict] = {} 
 
 
@@ -37,14 +37,14 @@ data_cache: Dict[int, Dict] = {}
 @app.on_event("startup")
 def load_data(): 
     """
-    Load Pokémon data from a remote JSON dataset into the database at startup.
+    Load Pokemon data from a remote JSON dataset into the database at startup.
 
     This function is triggered on the application's startup event. It retrieves
-    Pokémon data from a specified URL, parses the JSON response, and populates
-    the database with Pokémon details, including abilities, stats, and types.
+    Pokemon data from a specified URL, parses the JSON response, and populates
+    the database with Pokemon details, including abilities, stats, and types.
 
-    The function checks for the existence of each Pokémon in the database to
-    avoid duplicates. If a Pokémon does not exist, it is added along with its
+    The function checks for the existence of each Pokemon in the database to
+    avoid duplicates. If a Pokemon does not exist, it is added along with its
     associated abilities, stats, and types.
 
     In case of any errors during the data loading process, an error message is
@@ -61,7 +61,7 @@ def load_data():
         db: Session = next(get_db())
         for p in data:
             if not db.query(Pokemon).filter(Pokemon.id == p["id"]).first():
-                # Add Pokémon
+                # Add Pokemon
                 pokemon = Pokemon(
                     id=p["id"],
                     name=p["name"],
@@ -116,7 +116,37 @@ def root():
         Dict[str, str]: A dictionary containing a welcome message.
     """
     logging.info("API root endpoint accessed.")
-    return {"message": "Welcome to the Pokémon Lookup API!"} 
+    return {"message": "Welcome to the Pokemon Lookup API!"} 
+
+
+@app.get("/pokemon/all", response_model=List[PokemonModel])
+def get_all_pokemon(db: Session = Depends(get_db)):
+    """
+    Retrieve all Pokemon.
+
+    This endpoint fetches the details of all Pokemon stored in the database.
+    Each Pokemon's attributes include its name, height, weight, experience points,
+    as well as associated abilities, stats, and types.
+
+    Args:
+        db (Session, optional): The database session dependency.
+
+    Returns:
+        List[PokemonModel]: A list of Pokemon details.
+
+    Raises:
+        HTTPException: If no Pokemon data is found, a 404 error is raised with
+        a message indicating that no Pokemon are available.
+    """
+
+    pokemon_list = db.query(Pokemon).all()
+    if pokemon_list:
+        logging.info(f"Successfully retrieved {len(pokemon_list)} Pokemon from the database.")
+        return pokemon_list
+    else:
+        logging.error("No Pokemon found in the database.")
+        raise HTTPException(status_code=404, detail="No Pokemon found")
+
 
 
 
@@ -124,23 +154,23 @@ def root():
 def get_pokemon_by_id(pokemon_id: int, db: Session = Depends(get_db)): 
     
     """
-    Retrieve a Pokémon by its ID.
+    Retrieve a Pokemon by its ID.
 
-    This endpoint fetches the details of a specific Pokémon from the database
-    using the provided Pokémon ID. The response includes the Pokémon's attributes
+    This endpoint fetches the details of a specific Pokemon from the database
+    using the provided Pokemon ID. The response includes the Pokemon's attributes
     such as its name, height, weight, experience points, and associated abilities,
     stats, and types.
 
     Args:
-        pokemon_id (int): The ID of the Pokémon to retrieve.
+        pokemon_id (int): The ID of the Pokemon to retrieve.
         db (Session, optional): The database session dependency.
 
     Returns:
-        PokemonModel: The Pokémon details if found.
+        PokemonModel: The Pokemon details if found.
 
     Raises:
-        HTTPException: If the Pokémon is not found, a 404 error is raised with
-        a message indicating that the Pokémon was not found.
+        HTTPException: If the Pokemon is not found, a 404 error is raised with
+        a message indicating that the Pokemon was not found.
     """
 
     pokemon = db.query(Pokemon).filter(Pokemon.id == pokemon_id).first()
@@ -156,23 +186,23 @@ def get_pokemon_by_id(pokemon_id: int, db: Session = Depends(get_db)):
 def get_pokemon_by_name(pokemon_name: str, db: Session = Depends(get_db)):
     
     """
-    Retrieve a Pokémon by its name.
+    Retrieve a Pokemon by its name.
 
-    This endpoint fetches the details of a specific Pokémon from the database
-    using the provided Pokémon name. The response includes the Pokémon's attributes
+    This endpoint fetches the details of a specific Pokemon from the database
+    using the provided Pokemon name. The response includes the Pokemon's attributes
     such as its name, height, weight, experience points, and associated abilities,
     stats, and types.
 
     Args:
-        pokemon_name (str): The name of the Pokémon to retrieve.
+        pokemon_name (str): The name of the Pokemon to retrieve.
         db (Session, optional): The database session dependency.
 
     Returns:
-        PokemonModel: The Pokémon details if found.
+        PokemonModel: The Pokemon details if found.
 
     Raises:
-        HTTPException: If the Pokémon is not found, a 404 error is raised with
-        a message indicating that the Pokémon was not found.
+        HTTPException: If the Pokemon is not found, a 404 error is raised with
+        a message indicating that the Pokemon was not found.
     """
     
     pokemon = db.query(Pokemon).filter(Pokemon.name.ilike(pokemon_name)).first()
@@ -188,24 +218,24 @@ def get_pokemon_by_name(pokemon_name: str, db: Session = Depends(get_db)):
 def create_pokemon(pokemon: PokemonModel, db: Session = Depends(get_db)):
     
     """
-    Create a new Pokémon entry.
+    Create a new Pokemon entry.
 
-    This endpoint allows for the creation of a new Pokémon in the database. It
-    takes a Pokémon model as input and adds the corresponding Pokémon details,
+    This endpoint allows for the creation of a new Pokemon in the database. It
+    takes a Pokemon model as input and adds the corresponding Pokemon details,
     including attributes, abilities, stats, and types, to the database.
 
     Args:
-        pokemon (PokemonModel): An instance of the Pokémon model containing the
-            details of the Pokémon to be created.
+        pokemon (PokemonModel): An instance of the Pokemon model containing the
+            details of the Pokemon to be created.
         db (Session): The database session dependency.
 
     Returns:
-        Dict: A dictionary containing the created Pokémon's details, including
+        Dict: A dictionary containing the created Pokemon's details, including
         attributes such as ID, name, height, weight, experience points, image URL,
-        Pokémon URL, abilities, stats, and types.
+        Pokemon URL, abilities, stats, and types.
 
     Raises:
-        HTTPException: If a Pokémon with the specified ID already exists, a 400
+        HTTPException: If a Pokemon with the specified ID already exists, a 400
         error is raised with a message indicating the duplication.
     """
 
@@ -265,27 +295,27 @@ def create_pokemon(pokemon: PokemonModel, db: Session = Depends(get_db)):
 def update_pokemon(pokemon_id: int, updated_data: PokemonUpdateModel, db: Session = Depends(get_db)):
     
     """
-    Update a Pokémon entry.
+    Update a Pokemon entry.
 
-    This endpoint allows for the partial update of an existing Pokémon in the
-    database. It takes a Pokémon ID and an instance of the Pokémon update model
-    containing the updated details of the Pokémon. The response includes the
-    updated Pokémon's details, including attributes, abilities, stats, and types.
+    This endpoint allows for the partial update of an existing Pokemon in the
+    database. It takes a Pokemon ID and an instance of the Pokemon update model
+    containing the updated details of the Pokemon. The response includes the
+    updated Pokemon's details, including attributes, abilities, stats, and types.
 
     Args:
-        pokemon_id (int): The ID of the Pokémon to update.
-        updated_data (PokemonUpdateModel): An instance of the Pokémon update model
-            containing the updated details of the Pokémon.
+        pokemon_id (int): The ID of the Pokemon to update.
+        updated_data (PokemonUpdateModel): An instance of the Pokemon update model
+            containing the updated details of the Pokemon.
         db (Session): The database session dependency.
 
     Returns:
-        PokemonUpdateModel: The updated Pokémon's details, including attributes
+        PokemonUpdateModel: The updated Pokemon's details, including attributes
             such as ID, name, height, weight, experience points, image URL,
-            Pokémon URL, abilities, stats, and types.
+            Pokemon URL, abilities, stats, and types.
 
     Raises:
-        HTTPException: If the Pokémon is not found, a 404 error is raised with
-            a message indicating that the Pokémon was not found.
+        HTTPException: If the Pokemon is not found, a 404 error is raised with
+            a message indicating that the Pokemon was not found.
     """
     pokemon = db.query(Pokemon).filter(Pokemon.id == pokemon_id).first()
     if not pokemon:
@@ -336,22 +366,22 @@ def update_pokemon(pokemon_id: int, updated_data: PokemonUpdateModel, db: Sessio
 def delete_pokemon(pokemon_id: int, db: Session = Depends(get_db)):
     
     """
-    Delete a Pokémon entry.
+    Delete a Pokemon entry.
 
-    This endpoint deletes an existing Pokémon from the database using the provided
-    Pokémon ID. If the Pokémon is found, it is removed from the database, and a
+    This endpoint deletes an existing Pokemon from the database using the provided
+    Pokemon ID. If the Pokemon is found, it is removed from the database, and a
     confirmation message is logged.
 
     Args:
-        pokemon_id (int): The ID of the Pokémon to delete.
+        pokemon_id (int): The ID of the Pokemon to delete.
         db (Session): The database session dependency.
 
     Returns:
-        Pokemon: The deleted Pokémon's details if found.
+        Pokemon: The deleted Pokemon's details if found.
 
     Raises:
-        HTTPException: If the Pokémon is not found, a 404 error is raised with
-        a message indicating that the Pokémon was not found.
+        HTTPException: If the Pokemon is not found, a 404 error is raised with
+        a message indicating that the Pokemon was not found.
     """
 
     pokemon = db.query(Pokemon).filter(Pokemon.id == pokemon_id).first()

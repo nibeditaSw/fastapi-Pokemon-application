@@ -10,6 +10,8 @@ sqlalchemy = "*"
 psycopg2 = "*"
 fastapi = {extras = ["all"], version = "*"}
 python-dotenv = "*"
+alembic = "*"
+jinja2 = "*"
 
 [dev-packages]
 
