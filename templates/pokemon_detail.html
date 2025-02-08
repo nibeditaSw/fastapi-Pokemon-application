@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pokemon Details | {{ pokemon.name }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</head>
+<body class="bg-light">
+
+    <!-- Navbar -->
+    <nav class="navbar navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="/">Pokemon Explorer</a>
+        </div>
+    </nav>
+
+    <div class="container mt-5">
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <div class="card shadow-lg border-0">
+                    <div class="card-header bg-primary text-white text-center">
+                        <h2>{{ pokemon.name }} (ID: {{ pokemon.id }})</h2>
+                    </div>
+                    <div class="card-body text-center">
+                        <img src="{{ pokemon.image_url }}" alt="{{ pokemon.name }}" class="img-fluid rounded mb-3" style="max-height: 250px;">
+                        <p class="lead"><strong>Height:</strong> {{ pokemon.height }} meters</p>
+                        <p class="lead"><strong>Weight:</strong> {{ pokemon.weight }} kg</p>
+                        <p class="lead"><strong>XP:</strong> {{ pokemon.xp }}</p>
+
+                        <!-- Abilities Section -->
+                        <h4 class="mt-4">Abilities</h4>
+                        <ul class="list-group list-group-flush">
+                            {% for ability in pokemon.abilities %}
+                                <li class="list-group-item">{{ ability.name }} 
+                                    <span class="badge {% if ability.is_hidden %}bg-danger{% else %}bg-success{% endif %}">Hidden: {{ ability.is_hidden }}</span>
+                                </li>
+                            {% endfor %}
+                        </ul>
+
+                        <!-- Stats Section -->
+                        <h4 class="mt-4">Stats</h4>
+                        <div class="row">
+                            {% for stat in pokemon.stats %}
+                            <div class="col-md-4">
+                                <div class="card text-center shadow-sm mt-2">
+                                    <div class="card-body">
+                                        <h5 class="card-title">{{ stat.name }}</h5>
+                                        <p class="card-text fw-bold">{{ stat.base_stat }}</p>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+
+                        <!-- Types Section -->
+                        <h4 class="mt-4">Types</h4>
+                        <div>
+                            {% for type_ in pokemon.types %}
+                                <span class="badge bg-warning text-dark fs-5 px-3 py-2">{{ type_.name }}</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>

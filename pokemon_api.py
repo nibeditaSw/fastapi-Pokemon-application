@@ -1,8 +1,9 @@
 import json 
 import logging
 import urllib.request 
-from fastapi import FastAPI, HTTPException, Depends 
-from typing import Dict, List
+from fastapi import FastAPI, HTTPException, Depends, Request 
+from fastapi.templating import Jinja2Templates
+from typing import Dict, List, Any
 from sqlalchemy.orm import Session
 from pydantic.networks import HttpUrl
 from schemas import PokemonModel, PokemonUpdateModel
@@ -29,9 +30,18 @@ data_url = "https://raw.githubusercontent.com/DetainedDeveloper/Pokedex/master/p
 # Initialize FastAPI app
 app = FastAPI() 
 
+# Jinja2 Template Engine
+templates = Jinja2Templates(directory="templates")
+
 # In-memory storage for Pokemon data
 data_cache: Dict[int, Dict] = {} 
 
+
+# Global function to render templates
+def render_template(template_name: str, request: Request, context: Dict[str, Any]):
+    """Helper function to render Jinja2 templates with provided context."""
+    context["request"] = request  # Required for Jinja2 to work with FastAPI
+    return templates.TemplateResponse(template_name, context)
 
 
 @app.on_event("startup")
@@ -180,6 +190,19 @@ def get_pokemon_by_id(pokemon_id: int, db: Session = Depends(get_db)):
     else:
         logging.error(f"Failed to find Pokemon with ID: {pokemon_id}")
         raise HTTPException(status_code=404, detail="Pokemon not found")
+    
+
+@app.get("/pokemon/html/{pokemon_id}")
+def get_pokemon_html(pokemon_id: int, request: Request, db: Session = Depends(get_db)):
+    """
+    Retrieve Pokémon details and render them using Jinja2.
+    """
+    pokemon = db.query(Pokemon).filter(Pokemon.id == pokemon_id).first()
+    if not pokemon:
+        logging.error(f"Pokémon with ID {pokemon_id} not found")
+        raise HTTPException(status_code=404, detail="Pokémon not found")
+
+    return render_template("pokemon_detail.html", request, {"pokemon": pokemon})
     
 
 @app.get("/pokemon/name/{pokemon_name}", response_model=PokemonModel)

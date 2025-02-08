@@ -14,9 +14,9 @@ class Pokemon(Base):
     pokemon_url = Column(String)
 
     # Relationships
-    abilities = relationship("Ability", back_populates="pokemons", cascade="all, delete")
-    stats = relationship("Stat", back_populates="pokemons", cascade="all, delete")
-    types = relationship("Type", back_populates="pokemons", cascade="all, delete")
+    abilities = relationship("Ability", back_populates="pokemon", cascade="all, delete")
+    stats = relationship("Stat", back_populates="pokemon", cascade="all, delete")
+    types = relationship("Type", back_populates="pokemon", cascade="all, delete")
 
 
 class Ability(Base):
