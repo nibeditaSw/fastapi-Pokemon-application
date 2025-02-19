@@ -158,6 +158,17 @@ def get_all_pokemon(db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="No Pokemon found")
 
 
+@app.get("/pokemon/all/details")
+def get_all_pokemon_html(request: Request, db: Session = Depends(get_db)):
+    """
+    Retrieve all Pokémon and render them using Jinja2.
+    """
+    pokemon_list = db.query(Pokemon).all()
+    if not pokemon_list:
+        logging.error("No Pokémon found in the database.")
+        raise HTTPException(status_code=404, detail="No Pokémon found")
+
+    return templates.TemplateResponse("pokemon_list.html", {"request": request, "pokemons": pokemon_list})
 
 
 @app.get("/pokemon/{pokemon_id}", response_model=PokemonModel) 
@@ -192,7 +203,7 @@ def get_pokemon_by_id(pokemon_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Pokemon not found")
     
 
-@app.get("/pokemon/html/{pokemon_id}")
+@app.get("/pokemon/{pokemon_id}/details")
 def get_pokemon_html(pokemon_id: int, request: Request, db: Session = Depends(get_db)):
     """
     Retrieve Pokémon details and render them using Jinja2.
@@ -235,6 +246,20 @@ def get_pokemon_by_name(pokemon_name: str, db: Session = Depends(get_db)):
     else:
         logging.error(f"Failed to find Pokemon with name: {pokemon_name}")
         raise HTTPException(status_code=404, detail="Pokemon not found")
+    
+
+@app.get("/pokemon/name/{pokemon_name}/details")
+def get_pokemon_by_name_html(pokemon_name: str, request: Request, db: Session = Depends(get_db)):
+    """
+    Retrieve a Pokémon by its name and render it using Jinja2.
+    """
+    pokemon = db.query(Pokemon).filter(Pokemon.name.ilike(pokemon_name)).first()
+    if not pokemon:
+        logging.error(f"Pokémon with name '{pokemon_name}' not found")
+        raise HTTPException(status_code=404, detail="Pokémon not found")
+
+    return templates.TemplateResponse("pokemon_name_details.html", {"request": request, "pokemon": pokemon})
+
 
 
 @app.post("/pokemon/", response_model=PokemonModel)

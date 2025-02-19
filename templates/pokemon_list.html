@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>All Pokémon</title>
+</head>
+<body>
+    <h1>All Pokémon</h1>
+    {% if pokemons %}
+        <ul>
+            {% for pokemon in pokemons %}
+                <li>
+                    <a href="/pokemon/{{ pokemon.id }}/details">{{ pokemon.name }}</a> 
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>No Pokémon found.</p>
+    {% endif %}
+    <a href="/">Back to Home</a>
+</body>
+</html>
